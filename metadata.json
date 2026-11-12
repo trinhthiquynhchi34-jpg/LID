@@ -1,0 +1,8 @@
+{
+  "name": "Remix CinéRoll - Slideshow Thước Phim Điện Ảnh",
+  "description": "Website trình chiếu slideshow hình ảnh phong cách cuộn phim nhựa 35mm và máy chiếu vintage độc đáo với hiệu ứng chuyển động chân thực.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

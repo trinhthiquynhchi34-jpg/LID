@@ -1,0 +1,65 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-outfit: 'Outfit', sans-serif;
+    --font-playfair: 'Playfair Display', serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+  
+  body {
+    font-family: var(--font-outfit);
+  }
+}
+
+/* Film Perforation Sprocket Hole Pattern */
+.sprocket-holes-horizontal {
+  background-image: radial-gradient(circle, #050505 40%, transparent 42%), 
+                    radial-gradient(circle, #050505 40%, transparent 42%);
+  background-size: 28px 18px;
+  background-position: 0 0, 14px 9px;
+}
+
+/* Film Grain Texture */
+.film-grain {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.07'/%3E%3C/svg%3E");
+}
+
+/* Vintage Projector Flicker Keyframes */
+@keyframes projector-flicker {
+  0% { opacity: 0.98; filter: brightness(1) contrast(1.02); }
+  25% { opacity: 0.93; filter: brightness(0.97) contrast(1.05); }
+  50% { opacity: 0.99; filter: brightness(1.03) contrast(0.99); }
+  75% { opacity: 0.92; filter: brightness(0.96) contrast(1.03); }
+  100% { opacity: 0.98; filter: brightness(1) contrast(1.02); }
+}
+
+.animate-projector-flicker {
+  animation: projector-flicker 0.12s infinite;
+}
+
+/* Film stock simulation filters */
+.filter-kodak-portra {
+  filter: sepia(0.12) saturate(1.15) contrast(1.05) brightness(1.02);
+}
+
+.filter-ilford-hp5 {
+  filter: grayscale(1) contrast(1.35) brightness(0.95);
+}
+
+.filter-fuji-velvia {
+  filter: saturate(1.4) contrast(1.18) hue-rotate(-5deg);
+}
+
+.filter-vintage-1920 {
+  filter: sepia(0.65) contrast(1.2) brightness(0.9) saturate(0.8);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
