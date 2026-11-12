@@ -1,9 +1,13 @@
+
 {
   "name": "cineroll-drawn-slideshow",
   "private": true,
   "version": "1.0.0",
   "description": "35mm vertical film slideshow with ambient background lyrics and THAMA - Drawn OST",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
@@ -28,7 +32,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
