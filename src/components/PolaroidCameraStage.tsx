@@ -15,6 +15,9 @@ interface PolaroidCameraStageProps {
   roll: FilmRoll;
   isPlaying: boolean;
   onTogglePlay: () => void;
+  isMusicPlaying: boolean;
+  onToggleMusic: () => void;
+  onAddPhotos: (newPhotos: FilmPhoto[]) => void;
 }
 
 interface ActiveShot {
@@ -36,6 +39,9 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
   roll,
   isPlaying,
   onTogglePlay,
+  isMusicPlaying,
+  onToggleMusic,
+  onAddPhotos,
 }) => {
   const photos = roll.photos;
   const [activeShot, setActiveShot] = useState<ActiveShot | null>(null);
@@ -54,6 +60,9 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
   const developTimerRef = useRef<number | null>(null);
   const commitTimerRef = useRef<number | null>(null);
   const trayScrollRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingJumpIndexRef = useRef<number | null>(null);
+  const createdUrlsRef = useRef<string[]>([]);
 
   // Remove outer white studio background from the Polaroid Now PNG using edge flood-fill
   useEffect(() => {
@@ -251,15 +260,26 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
     });
   }, [printedHistory]);
 
-  // Clear pending timers on unmount
+  // Clear pending timers and revoke object URLs on unmount
   useEffect(() => {
+    const urls = createdUrlsRef.current;
     return () => {
       if (autoTimerRef.current) window.clearInterval(autoTimerRef.current);
       if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
       if (developTimerRef.current) window.clearTimeout(developTimerRef.current);
       if (commitTimerRef.current) window.clearTimeout(commitTimerRef.current);
+      urls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
+
+  // Immediately snap the first newly uploaded photo once added to roll
+  useEffect(() => {
+    if (pendingJumpIndexRef.current !== null && pendingJumpIndexRef.current < photos.length) {
+      const targetIdx = pendingJumpIndexRef.current;
+      pendingJumpIndexRef.current = null;
+      snapPhoto(targetIdx);
+    }
+  }, [photos, snapPhoto]);
 
   // Auto-snap loop: take photo -> eject & develop -> drop below -> repeat
   useEffect(() => {
@@ -291,13 +311,58 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
     };
   }, [isPlaying, snapPhoto]);
 
-  const handleManualSnap = (e: React.MouseEvent) => {
+  const handleCameraClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    snapPhoto();
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) {
+      e.target.value = '';
+      return;
+    }
+
+    const baseTime = Date.now();
+    const addedPhotos: FilmPhoto[] = imageFiles.map((file, idx) => {
+      const objectUrl = URL.createObjectURL(file);
+      createdUrlsRef.current.push(objectUrl);
+      return {
+        id: `user-upload-${baseTime}-${idx}`,
+        url: objectUrl,
+        title: '',
+        filmStockName: roll.stockLabel || 'POLAROID NOW',
+        frameNumber: String(photos.length + idx + 1).padStart(2, '0'),
+        objectFit: 'cover',
+        objectPosition: 'center',
+      };
+    });
+
+    pendingJumpIndexRef.current = photos.length;
+    onAddPhotos(addedPhotos);
+    e.target.value = '';
+  };
+
+  const handleToggleMusicClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleMusic();
   };
 
   return (
-    <div className="relative w-full h-full flex flex-col items-center justify-between py-4 sm:py-6 select-none overflow-hidden px-2">
+    <div className="relative w-full h-full flex flex-col items-center justify-between py-3 sm:py-4 select-none overflow-hidden px-2">
+      {/* Hidden File Input for Adding User Image Files */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       {/* Soft Full-Screen Camera Flash Overlay */}
       <AnimatePresence>
         {isFlashing && activeShot && (
@@ -316,15 +381,15 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
       <div className="relative z-20 flex-1 flex flex-col items-center justify-center min-h-0">
         {/* Polaroid Now Camera */}
         <motion.div
-          onClick={handleManualSnap}
+          onClick={handleCameraClick}
           animate={
             isFlashing
               ? { y: [0, 3, 0], scale: [1, 0.985, 1] }
               : { y: 0, scale: 1 }
           }
           transition={{ duration: 0.25 }}
-          title="Nhấn vào máy ảnh để chụp ảnh"
-          className="relative z-20 w-[176px] sm:w-[214px] md:w-[234px] aspect-[454/435] cursor-pointer group shrink-0"
+          title="Nhấn vào máy ảnh để thêm ảnh mới"
+          className="relative z-20 w-[152px] sm:w-[184px] md:w-[202px] aspect-[454/435] cursor-pointer group shrink-0"
         >
           <img
             src={cameraCutoutUrl || POLAROID_CAMERA_SRC}
@@ -350,20 +415,24 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
             )}
           </AnimatePresence>
 
-          {/* Interactive Red Shutter Button Hotspot */}
+          {/* Interactive Red Button: Toggles Music Play/Pause */}
           <button
             type="button"
-            onClick={handleManualSnap}
-            aria-label="Chụp ảnh Polaroid"
-            title="Bấm nút đỏ để chụp tách!"
+            onClick={handleToggleMusicClick}
+            aria-label={isMusicPlaying ? 'Dừng nhạc' : 'Phát nhạc'}
+            title={isMusicPlaying ? 'Bấm nút đỏ để dừng nhạc' : 'Bấm nút đỏ để phát nhạc'}
             style={{ left: '11.5%', top: '40%', width: '10.8%', height: '9.8%' }}
-            className="absolute rounded-full cursor-pointer hover:ring-2 hover:ring-red-300/70 active:scale-90 transition-transform"
+            className={`absolute rounded-full cursor-pointer active:scale-90 transition-all ${
+              isMusicPlaying
+                ? 'hover:ring-2 hover:ring-red-300/80'
+                : 'bg-black/40 ring-2 ring-white/55 hover:ring-amber-300/90'
+            }`}
           />
         </motion.div>
 
         {/* Ejection Chute: photo slides out AFTER shutter flashes, then drops down to the tray */}
         <div
-          className="relative z-30 -mt-[23px] sm:-mt-[28px] md:-mt-[31px] pt-[16px] sm:pt-[20px] md:pt-[22px] px-4 pb-2 min-h-[185px] sm:min-h-[225px] md:min-h-[248px] overflow-hidden flex flex-col items-center shrink-0"
+          className="relative z-30 -mt-[20px] sm:-mt-[24px] md:-mt-[26px] pt-[14px] sm:pt-[18px] md:pt-[20px] px-4 pb-2 min-h-[155px] sm:min-h-[188px] md:min-h-[208px] overflow-hidden flex flex-col items-center shrink-0"
           style={{ transform: 'translateX(1.5%)' }}
         >
           <AnimatePresence mode="wait">
@@ -390,7 +459,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
                 }}
                 onClick={onTogglePlay}
                 title={isPlaying ? 'Nhấn để tạm dừng chụp tự động' : 'Nhấn để tiếp tục chụp tự động'}
-                className="relative w-[205px] sm:w-[252px] md:w-[276px] bg-[#faf7f0] p-2 sm:p-2.5 pb-6 sm:pb-7 rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.92)] border border-neutral-300/60 cursor-pointer"
+                className="relative w-[182px] sm:w-[220px] md:w-[244px] bg-[#faf7f0] p-1.5 sm:p-2 pb-5 sm:pb-6 rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.92)] border border-neutral-300/60 cursor-pointer"
               >
                 <div className="relative w-full aspect-[16/10] bg-[#0b0d12] overflow-hidden shadow-inner">
                   <motion.img
@@ -444,10 +513,10 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
       {/* Bottom Enlarged Printed Polaroid Gallery — only populated AFTER a shot completes */}
       <div
         ref={trayScrollRef}
-        className="relative z-20 w-full min-h-[126px] sm:min-h-[164px] md:min-h-[188px] overflow-x-auto no-scrollbar shrink-0 pb-1 sm:pb-2 flex items-center"
+        className="relative z-20 w-full min-h-[175px] sm:min-h-[225px] md:min-h-[255px] lg:min-h-[280px] overflow-x-auto no-scrollbar shrink-0 pb-2 sm:pb-3 flex items-center"
       >
         {printedHistory.length > 0 && (
-          <div className="w-max mx-auto flex items-center gap-3 sm:gap-4 md:gap-5 px-5 py-3">
+          <div className="w-max mx-auto flex items-center gap-4 sm:gap-5 md:gap-6 px-6 py-4">
             {printedHistory.map((item) => {
               const isLatestPrinted =
                 printedHistory[printedHistory.length - 1]?.printKey === item.printKey;
@@ -457,19 +526,19 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
                   type="button"
                   initial={{ opacity: 0, y: -28, scale: 0.85 }}
                   animate={{
-                    opacity: isLatestPrinted ? 1 : 0.88,
+                    opacity: isLatestPrinted ? 1 : 0.9,
                     y: 0,
                     scale: isLatestPrinted ? 1.04 : 1,
                     rotate: item.tilt,
                   }}
-                  whileHover={{ scale: 1.09, opacity: 1, rotate: 0 }}
+                  whileHover={{ scale: 1.08, opacity: 1, rotate: 0 }}
                   transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                   onClick={(e) => {
                     e.stopPropagation();
                     snapPhoto(item.index);
                   }}
                   title={`Chụp lại tấm #${item.index + 1}`}
-                  className={`shrink-0 w-36 sm:w-48 md:w-56 bg-[#faf7f0] p-1.5 sm:p-2 pb-4 sm:pb-5 rounded-[3px] shadow-[0_14px_34px_rgba(0,0,0,0.85)] border transition-shadow ${
+                  className={`shrink-0 w-48 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] shadow-[0_18px_42px_rgba(0,0,0,0.88)] border transition-shadow ${
                     isLatestPrinted
                       ? 'border-amber-400 ring-2 ring-amber-400/60 shadow-amber-500/20'
                       : 'border-neutral-300/50 hover:border-amber-300/80'
