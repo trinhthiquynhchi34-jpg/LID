@@ -18,6 +18,7 @@ interface PolaroidCameraStageProps {
   isMusicPlaying: boolean;
   onToggleMusic: () => void;
   onAddPhotos: (newPhotos: FilmPhoto[]) => void;
+  onResetPhotos: () => void;
   onOpenMediaModal: () => void;
   onOpenBackgroundModal: () => void;
 }
@@ -44,6 +45,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
   isMusicPlaying,
   onToggleMusic,
   onAddPhotos,
+  onResetPhotos,
   onOpenMediaModal,
   onOpenBackgroundModal,
 }) => {
@@ -53,6 +55,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
   const [isDeveloping, setIsDeveloping] = useState<boolean>(false);
   const [printedHistory, setPrintedHistory] = useState<PrintedItem[]>([]);
   const [cameraCutoutUrl, setCameraCutoutUrl] = useState<string | null>(null);
+  const [isResetPulse, setIsResetPulse] = useState<boolean>(false);
   const [isCameraSoundOn, setIsCameraSoundOn] = useState<boolean>(() =>
     filmAudio.getIsCameraSoundEnabled()
   );
@@ -66,6 +69,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
   const flashTimerRef = useRef<number | null>(null);
   const developTimerRef = useRef<number | null>(null);
   const commitTimerRef = useRef<number | null>(null);
+  const resetPulseTimerRef = useRef<number | null>(null);
   const trayScrollRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingJumpIndexRef = useRef<number | null>(null);
@@ -275,6 +279,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
       if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
       if (developTimerRef.current) window.clearTimeout(developTimerRef.current);
       if (commitTimerRef.current) window.clearTimeout(commitTimerRef.current);
+      if (resetPulseTimerRef.current) window.clearTimeout(resetPulseTimerRef.current);
       urls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
@@ -369,6 +374,52 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
     setIsCameraSoundOn(enabled);
   };
 
+  const handleResetPhotosClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (flashTimerRef.current) {
+      window.clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = null;
+    }
+    if (developTimerRef.current) {
+      window.clearTimeout(developTimerRef.current);
+      developTimerRef.current = null;
+    }
+    if (commitTimerRef.current) {
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+    if (resetPulseTimerRef.current) {
+      window.clearTimeout(resetPulseTimerRef.current);
+    }
+
+    createdUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    createdUrlsRef.current = [];
+
+    nextIndexRef.current = 0;
+    shotIdRef.current = 0;
+    activeShotRef.current = null;
+    committedShotIdRef.current = 0;
+    pendingJumpIndexRef.current = null;
+
+    setIsFlashing(false);
+    setIsDeveloping(false);
+    setActiveShot(null);
+    setPrintedHistory([]);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    onResetPhotos();
+
+    setIsResetPulse(true);
+    resetPulseTimerRef.current = window.setTimeout(() => {
+      setIsResetPulse(false);
+      resetPulseTimerRef.current = null;
+    }, 380);
+  };
+
   return (
     <div className="relative w-full h-full flex flex-col items-center justify-between pt-0 pb-2 select-none overflow-y-auto overflow-x-hidden no-scrollbar px-2">
       {/* Hidden File Input for Adding User Image Files */}
@@ -397,7 +448,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
 
       {/* Center Stage: Polaroid Now Camera flush to top + Active Ejecting Photo */}
       <div className="relative z-20 flex-1 flex flex-col items-center justify-start min-h-0">
-        {/* Polaroid Now Camera — body chooses background; lens selects photos; red toggles music; flash toggles camera sound; purple changes music & lyrics */}
+        {/* Polaroid Now Camera — body chooses background; lens selects photos; viewfinder resets photos; red toggles music; flash toggles camera sound; purple changes music & lyrics */}
         <motion.div
           onClick={handleCameraBodyClick}
           animate={
@@ -406,7 +457,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
               : { y: 0, scale: 1 }
           }
           transition={{ duration: 0.25 }}
-          title="Bấm máy ảnh để chọn Background • Ống kính: chọn ảnh • Nút đỏ: nhạc • Flash: âm thanh • Nút tím: đổi nhạc & lyrics"
+          title="Bấm máy ảnh để chọn Background • Ống kính: chọn ảnh • Ô ngắm phải: reset ảnh • Nút đỏ: nhạc • Flash: âm thanh • Nút tím: đổi nhạc & lyrics"
           className="relative z-20 w-[132px] sm:w-[156px] md:w-[172px] lg:w-[186px] aspect-[454/425] cursor-pointer group shrink-0"
         >
           <img
@@ -486,6 +537,26 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
             title="Bấm nút tím để thay nhạc và lyrics"
             style={{ left: '79.4%', top: '39.0%', width: '9.8%', height: '9.8%' }}
             className="absolute rounded-full cursor-pointer bg-gradient-to-b from-purple-400 via-purple-600 to-purple-800 border border-purple-200/80 shadow-[0_2px_10px_rgba(168,85,247,0.75),inset_0_1px_2px_rgba(255,255,255,0.55)] hover:brightness-110 hover:ring-2 hover:ring-purple-300/80 active:scale-90 transition-all z-10"
+          />
+
+          {/* Interactive Top-Right Viewfinder: Resets all photos so user can select again from scratch */}
+          <button
+            type="button"
+            onClick={handleResetPhotosClick}
+            aria-label="Reset ảnh để chọn lại từ đầu"
+            title={
+              photos.length > 0
+                ? 'Bấm vào ô ngắm để reset toàn bộ ảnh và chọn lại từ đầu'
+                : 'Reset ảnh (chưa có ảnh nào)'
+            }
+            style={{ left: '74.4%', top: '8.0%', width: '19.6%', height: '20.7%' }}
+            className={`absolute rounded-[22%] cursor-pointer active:scale-90 transition-all z-10 ${
+              isResetPulse
+                ? 'ring-2 ring-rose-400 bg-rose-400/20'
+                : photos.length > 0
+                  ? 'hover:ring-2 hover:ring-rose-300/80 hover:bg-rose-300/10'
+                  : 'hover:ring-2 hover:ring-white/55 hover:bg-white/5'
+            }`}
           />
         </motion.div>
 

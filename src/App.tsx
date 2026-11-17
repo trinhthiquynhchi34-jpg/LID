@@ -86,6 +86,13 @@ export default function App() {
     }));
   }, []);
 
+  const handleResetPhotos = useCallback(() => {
+    setActiveRoll((prev) => ({
+      ...prev,
+      photos: [],
+    }));
+  }, []);
+
   const handleOpenMediaModal = useCallback(() => {
     setDraftAudioFile(null);
     setDraftTrackName(trackName);
@@ -240,6 +247,7 @@ export default function App() {
           isMusicPlaying={isMusicPlaying}
           onToggleMusic={handleToggleMusic}
           onAddPhotos={handleAddPhotos}
+          onResetPhotos={handleResetPhotos}
           onOpenMediaModal={handleOpenMediaModal}
           onOpenBackgroundModal={handleOpenBackgroundModal}
         />
