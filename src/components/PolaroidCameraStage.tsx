@@ -7,9 +7,9 @@ const POLAROID_CAMERA_SRC = '/assets/aistudio/image_4956bb62.png';
 
 // Crop region in 828x828 source image containing the Polaroid Now camera body
 const CROP_X = 188;
-const CROP_Y = 182;
+const CROP_Y = 192;
 const CROP_W = 454;
-const CROP_H = 435;
+const CROP_H = 425;
 
 interface PolaroidCameraStageProps {
   roll: FilmRoll;
@@ -352,7 +352,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
   };
 
   return (
-    <div className="relative w-full h-full flex flex-col items-center justify-between py-3 sm:py-4 select-none overflow-hidden px-2">
+    <div className="relative w-full h-full flex flex-col items-center justify-between pt-0 pb-2 select-none overflow-y-auto overflow-x-hidden no-scrollbar px-2">
       {/* Hidden File Input for Adding User Image Files */}
       <input
         ref={fileInputRef}
@@ -377,9 +377,9 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Center Stage: Polaroid Now Camera + Active Ejecting Photo */}
-      <div className="relative z-20 flex-1 flex flex-col items-center justify-center min-h-0">
-        {/* Polaroid Now Camera */}
+      {/* Center Stage: Polaroid Now Camera flush to top + Active Ejecting Photo */}
+      <div className="relative z-20 flex-1 flex flex-col items-center justify-start min-h-0">
+        {/* Polaroid Now Camera — compact size at top of stage */}
         <motion.div
           onClick={handleCameraClick}
           animate={
@@ -389,7 +389,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
           }
           transition={{ duration: 0.25 }}
           title="Nhấn vào máy ảnh để thêm ảnh mới"
-          className="relative z-20 w-[152px] sm:w-[184px] md:w-[202px] aspect-[454/435] cursor-pointer group shrink-0"
+          className="relative z-20 w-[132px] sm:w-[156px] md:w-[172px] lg:w-[186px] aspect-[454/425] cursor-pointer group shrink-0"
         >
           <img
             src={cameraCutoutUrl || POLAROID_CAMERA_SRC}
@@ -409,7 +409,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
                 animate={{ opacity: 0, scale: 1.5 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35, ease: 'easeOut' }}
-                style={{ left: '4.5%', top: '8.8%', width: '23%', height: '24%' }}
+                style={{ left: '4.8%', top: '7.1%', width: '22.5%', height: '24.2%' }}
                 className="absolute rounded-full bg-white shadow-[0_0_50px_22px_rgba(255,255,255,0.95)] pointer-events-none"
               />
             )}
@@ -421,7 +421,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
             onClick={handleToggleMusicClick}
             aria-label={isMusicPlaying ? 'Dừng nhạc' : 'Phát nhạc'}
             title={isMusicPlaying ? 'Bấm nút đỏ để dừng nhạc' : 'Bấm nút đỏ để phát nhạc'}
-            style={{ left: '11.5%', top: '40%', width: '10.8%', height: '9.8%' }}
+            style={{ left: '11.5%', top: '38.8%', width: '10.8%', height: '10.0%' }}
             className={`absolute rounded-full cursor-pointer active:scale-90 transition-all ${
               isMusicPlaying
                 ? 'hover:ring-2 hover:ring-red-300/80'
@@ -430,16 +430,15 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
           />
         </motion.div>
 
-        {/* Ejection Chute: photo slides out AFTER shutter flashes, then drops down to the tray */}
+        {/* Ejection Chute: photo emerges from compact camera slot and expands to match bottom row size */}
         <div
-          className="relative z-30 -mt-[20px] sm:-mt-[24px] md:-mt-[26px] pt-[14px] sm:pt-[18px] md:pt-[20px] px-4 pb-2 min-h-[155px] sm:min-h-[188px] md:min-h-[208px] overflow-hidden flex flex-col items-center shrink-0"
-          style={{ transform: 'translateX(1.5%)' }}
+          className="relative z-30 -mt-[17px] sm:-mt-[20px] md:-mt-[22px] lg:-mt-[24px] pt-[14px] sm:pt-[17px] md:pt-[19px] lg:pt-[20px] translate-x-[2px] sm:translate-x-[3px] px-4 pb-2 min-h-[185px] sm:min-h-[225px] md:min-h-[248px] lg:min-h-[272px] overflow-hidden flex flex-col items-center shrink-0"
         >
           <AnimatePresence mode="wait">
             {activeShot && (
               <motion.div
                 key={`polaroid-${activeShot.shotId}-${activeShot.photo.id}`}
-                initial={{ y: -230, opacity: 0.96, scale: 0.95, rotate: -1.2 }}
+                initial={{ y: -235, opacity: 0.96, scale: 0.5, rotate: -1.2 }}
                 animate={{
                   y: 0,
                   opacity: 1,
@@ -449,17 +448,18 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
                 exit={{
                   y: 120,
                   opacity: 0,
-                  scale: 0.72,
+                  scale: 0.78,
                   transition: { duration: 0.42, ease: [0.4, 0, 1, 1] },
                 }}
                 transition={{
                   y: { duration: 1.0, delay: 0.12, ease: [0.22, 1, 0.36, 1] },
+                  scale: { duration: 0.95, delay: 0.14, ease: [0.22, 1, 0.36, 1] },
                   rotate: { duration: 1.05, delay: 0.12, ease: 'easeOut' },
                   opacity: { duration: 0.25, delay: 0.1 },
                 }}
                 onClick={onTogglePlay}
                 title={isPlaying ? 'Nhấn để tạm dừng chụp tự động' : 'Nhấn để tiếp tục chụp tự động'}
-                className="relative w-[182px] sm:w-[220px] md:w-[244px] bg-[#faf7f0] p-1.5 sm:p-2 pb-5 sm:pb-6 rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.92)] border border-neutral-300/60 cursor-pointer"
+                className="relative w-52 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.92)] border border-neutral-300/60 cursor-pointer"
               >
                 <div className="relative w-full aspect-[16/10] bg-[#0b0d12] overflow-hidden shadow-inner">
                   <motion.img
@@ -513,10 +513,10 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
       {/* Bottom Enlarged Printed Polaroid Gallery — only populated AFTER a shot completes */}
       <div
         ref={trayScrollRef}
-        className="relative z-20 w-full min-h-[175px] sm:min-h-[225px] md:min-h-[255px] lg:min-h-[280px] overflow-x-auto no-scrollbar shrink-0 pb-2 sm:pb-3 flex items-center"
+        className="relative z-20 w-full min-h-[168px] sm:min-h-[212px] md:min-h-[236px] lg:min-h-[256px] overflow-x-auto no-scrollbar shrink-0 pb-1 flex items-center"
       >
         {printedHistory.length > 0 && (
-          <div className="w-max mx-auto flex items-center gap-4 sm:gap-5 md:gap-6 px-6 py-4">
+          <div className="w-max mx-auto flex items-center gap-4 sm:gap-5 md:gap-6 px-6 py-3">
             {printedHistory.map((item) => {
               const isLatestPrinted =
                 printedHistory[printedHistory.length - 1]?.printKey === item.printKey;
@@ -526,19 +526,19 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
                   type="button"
                   initial={{ opacity: 0, y: -28, scale: 0.85 }}
                   animate={{
-                    opacity: isLatestPrinted ? 1 : 0.9,
+                    opacity: isLatestPrinted ? 1 : 0.92,
                     y: 0,
-                    scale: isLatestPrinted ? 1.04 : 1,
+                    scale: 1,
                     rotate: item.tilt,
                   }}
-                  whileHover={{ scale: 1.08, opacity: 1, rotate: 0 }}
+                  whileHover={{ scale: 1.06, opacity: 1, rotate: 0 }}
                   transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                   onClick={(e) => {
                     e.stopPropagation();
                     snapPhoto(item.index);
                   }}
                   title={`Chụp lại tấm #${item.index + 1}`}
-                  className={`shrink-0 w-48 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] shadow-[0_18px_42px_rgba(0,0,0,0.88)] border transition-shadow ${
+                  className={`shrink-0 w-52 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] shadow-[0_18px_42px_rgba(0,0,0,0.88)] border transition-shadow ${
                     isLatestPrinted
                       ? 'border-amber-400 ring-2 ring-amber-400/60 shadow-amber-500/20'
                       : 'border-neutral-300/50 hover:border-amber-300/80'
