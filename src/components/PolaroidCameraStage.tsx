@@ -18,6 +18,7 @@ interface PolaroidCameraStageProps {
   isMusicPlaying: boolean;
   onToggleMusic: () => void;
   onAddPhotos: (newPhotos: FilmPhoto[]) => void;
+  onOpenMediaModal: () => void;
 }
 
 interface ActiveShot {
@@ -42,6 +43,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
   isMusicPlaying,
   onToggleMusic,
   onAddPhotos,
+  onOpenMediaModal,
 }) => {
   const photos = roll.photos;
   const [activeShot, setActiveShot] = useState<ActiveShot | null>(null);
@@ -49,6 +51,9 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
   const [isDeveloping, setIsDeveloping] = useState<boolean>(false);
   const [printedHistory, setPrintedHistory] = useState<PrintedItem[]>([]);
   const [cameraCutoutUrl, setCameraCutoutUrl] = useState<string | null>(null);
+  const [isCameraSoundOn, setIsCameraSoundOn] = useState<boolean>(() =>
+    filmAudio.getIsCameraSoundEnabled()
+  );
 
   const nextIndexRef = useRef<number>(0);
   const shotIdRef = useRef<number>(0);
@@ -311,9 +316,13 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
     };
   }, [isPlaying, snapPhoto]);
 
-  const handleCameraClick = (e: React.MouseEvent) => {
+  const handleLensClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     fileInputRef.current?.click();
+  };
+
+  const handleCameraBodyClick = () => {
+    snapPhoto();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -351,6 +360,12 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
     onToggleMusic();
   };
 
+  const handleToggleCameraSound = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const enabled = filmAudio.toggleCameraSound();
+    setIsCameraSoundOn(enabled);
+  };
+
   return (
     <div className="relative w-full h-full flex flex-col items-center justify-between pt-0 pb-2 select-none overflow-y-auto overflow-x-hidden no-scrollbar px-2">
       {/* Hidden File Input for Adding User Image Files */}
@@ -379,16 +394,16 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
 
       {/* Center Stage: Polaroid Now Camera flush to top + Active Ejecting Photo */}
       <div className="relative z-20 flex-1 flex flex-col items-center justify-start min-h-0">
-        {/* Polaroid Now Camera — compact size at top of stage */}
+        {/* Polaroid Now Camera — lens selects/replaces photos, red toggles music, flash toggles camera sound, purple changes music & lyrics */}
         <motion.div
-          onClick={handleCameraClick}
+          onClick={handleCameraBodyClick}
           animate={
             isFlashing
               ? { y: [0, 3, 0], scale: [1, 0.985, 1] }
               : { y: 0, scale: 1 }
           }
           transition={{ duration: 0.25 }}
-          title="Nhấn vào máy ảnh để thêm ảnh mới"
+          title="Bấm thân máy để chụp ảnh • Bấm ống kính để chọn ảnh • Nút đỏ: nhạc • Flash: âm thanh • Nút tím: đổi nhạc & lyrics"
           className="relative z-20 w-[132px] sm:w-[156px] md:w-[172px] lg:w-[186px] aspect-[454/425] cursor-pointer group shrink-0"
         >
           <img
@@ -397,6 +412,34 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
             draggable={false}
             className={`w-full h-full object-contain drop-shadow-[0_18px_38px_rgba(0,0,0,0.85)] transition-opacity duration-200 ${
               cameraCutoutUrl ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+
+          {/* Interactive Camera Lens: Opens File Picker ONLY when clicking the lens */}
+          <button
+            type="button"
+            onClick={handleLensClick}
+            aria-label="Chọn hoặc thay ảnh"
+            title="Bấm vào ống kính để chọn / thay ảnh"
+            style={{ left: '35.2%', top: '12.0%', width: '33.0%', height: '33.4%' }}
+            className="absolute rounded-full cursor-pointer hover:ring-2 hover:ring-sky-300/70 hover:bg-sky-300/10 active:scale-95 transition-all z-10"
+          />
+
+          {/* Interactive Flash Window: Toggles Camera Sound ON/OFF */}
+          <button
+            type="button"
+            onClick={handleToggleCameraSound}
+            aria-label={isCameraSoundOn ? 'Tắt âm thanh máy ảnh' : 'Bật âm thanh máy ảnh'}
+            title={
+              isCameraSoundOn
+                ? 'Bấm vào đèn flash để tắt âm thanh máy ảnh'
+                : 'Bấm vào đèn flash để bật âm thanh máy ảnh'
+            }
+            style={{ left: '4.8%', top: '7.1%', width: '22.5%', height: '24.2%' }}
+            className={`absolute rounded-full cursor-pointer active:scale-95 transition-all z-10 ${
+              isCameraSoundOn
+                ? 'hover:ring-2 hover:ring-white/65'
+                : 'bg-black/40 ring-2 ring-white/45 hover:ring-amber-300/85'
             }`}
           />
 
@@ -410,7 +453,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35, ease: 'easeOut' }}
                 style={{ left: '4.8%', top: '7.1%', width: '22.5%', height: '24.2%' }}
-                className="absolute rounded-full bg-white shadow-[0_0_50px_22px_rgba(255,255,255,0.95)] pointer-events-none"
+                className="absolute z-20 rounded-full bg-white shadow-[0_0_50px_22px_rgba(255,255,255,0.95)] pointer-events-none"
               />
             )}
           </AnimatePresence>
@@ -422,11 +465,24 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
             aria-label={isMusicPlaying ? 'Dừng nhạc' : 'Phát nhạc'}
             title={isMusicPlaying ? 'Bấm nút đỏ để dừng nhạc' : 'Bấm nút đỏ để phát nhạc'}
             style={{ left: '11.5%', top: '38.8%', width: '10.8%', height: '10.0%' }}
-            className={`absolute rounded-full cursor-pointer active:scale-90 transition-all ${
+            className={`absolute rounded-full cursor-pointer active:scale-90 transition-all z-10 ${
               isMusicPlaying
                 ? 'hover:ring-2 hover:ring-red-300/80'
                 : 'bg-black/40 ring-2 ring-white/55 hover:ring-amber-300/90'
             }`}
+          />
+
+          {/* Interactive Purple Button: Opens Music & Lyrics Changer */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenMediaModal();
+            }}
+            aria-label="Thay nhạc và lyrics"
+            title="Bấm nút tím để thay nhạc và lyrics"
+            style={{ left: '79.4%', top: '39.0%', width: '9.8%', height: '9.8%' }}
+            className="absolute rounded-full cursor-pointer bg-gradient-to-b from-purple-400 via-purple-600 to-purple-800 border border-purple-200/80 shadow-[0_2px_10px_rgba(168,85,247,0.75),inset_0_1px_2px_rgba(255,255,255,0.55)] hover:brightness-110 hover:ring-2 hover:ring-purple-300/80 active:scale-90 transition-all z-10"
           />
         </motion.div>
 

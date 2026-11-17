@@ -69,7 +69,7 @@ class SoundtrackEngine {
   }
 
   public selectTrack(trackId: string, customUrl?: string) {
-    const wasPlaying = this.isPlaying;
+    const wasPlaying = this.getIsPlaying();
     this.stop();
     this.currentTrackId = trackId;
     if (customUrl) {
@@ -134,6 +134,8 @@ class SoundtrackEngine {
     }
     if (this.audioElement.src !== url && !this.audioElement.src.endsWith(url)) {
       this.audioElement.src = url;
+      this.audioElement.currentTime = 0;
+      this.audioElement.load();
     }
     this.audioElement.volume = this.volume;
     const playPromise = this.audioElement.play();

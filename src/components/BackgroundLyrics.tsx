@@ -1,13 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { soundtrackEngine } from '../utils/soundtrackEngine';
 
-interface LyricCue {
-  time: number; // seconds into THAMA - Drawn (231.39s total)
+export interface LyricCue {
+  time: number;
   text: string;
   isChorus?: boolean;
 }
 
-const LYRIC_CUES: LyricCue[] = [
+export const DEFAULT_LYRIC_CUES: LyricCue[] = [
   { time: 0.0, text: 'THAMA — Drawn (그려본다)' },
   // Verse 1 (00:14.5 – 00:44.0)
   { time: 14.5, text: 'I saw your face, you looked my way' },
@@ -67,19 +67,91 @@ const LYRIC_CUES: LyricCue[] = [
   { time: 223.8, text: 'Drawn to you', isChorus: true },
 ];
 
-export const BackgroundLyrics: React.FC = () => {
+const LRC_TIMESTAMP_REGEX = /\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]/g;
+
+function parseCustomLyrics(rawText: string, trackDuration: number): { cues: LyricCue[]; hasTimestamps: boolean } {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return { cues: DEFAULT_LYRIC_CUES, hasTimestamps: true };
+  }
+
+  const parsedLrc: LyricCue[] = [];
+  const plainLines: string[] = [];
+
+  for (const line of lines) {
+    const matches = Array.from(line.matchAll(LRC_TIMESTAMP_REGEX));
+    if (matches.length > 0) {
+      const text = line.replace(LRC_TIMESTAMP_REGEX, '').trim();
+      if (!text) continue;
+      for (const m of matches) {
+        const mins = parseInt(m[1], 10);
+        const secs = parseInt(m[2], 10);
+        const msStr = m[3] || '0';
+        const frac = parseInt(msStr, 10) / Math.pow(10, msStr.length);
+        const time = mins * 60 + secs + frac;
+        parsedLrc.push({ time, text });
+      }
+    } else if (!/^\[[a-zA-Z]{2,}:.*\]$/.test(line)) {
+      plainLines.push(line);
+    }
+  }
+
+  if (parsedLrc.length > 0) {
+    parsedLrc.sort((a, b) => a.time - b.time);
+    return { cues: parsedLrc, hasTimestamps: true };
+  }
+
+  // Plain text without timestamps: spread evenly across audio duration
+  const usableDuration = Math.max(20, trackDuration - 4);
+  const step = usableDuration / Math.max(1, plainLines.length);
+  const evenCues: LyricCue[] = plainLines.map((text, idx) => ({
+    time: idx * step,
+    text,
+  }));
+
+  return { cues: evenCues, hasTimestamps: false };
+}
+
+interface BackgroundLyricsProps {
+  customLyricsText?: string | null;
+}
+
+export const BackgroundLyrics: React.FC<BackgroundLyricsProps> = ({ customLyricsText }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const activeIndexRef = useRef<number>(0);
+  const [knownDuration, setKnownDuration] = useState<number>(() => soundtrackEngine.getDuration());
+
+  const { cues, hasTimestamps } = useMemo(() => {
+    if (customLyricsText === undefined || customLyricsText === null) {
+      return { cues: DEFAULT_LYRIC_CUES, hasTimestamps: true };
+    }
+    if (!customLyricsText.trim()) {
+      return { cues: [], hasTimestamps: true };
+    }
+    return parseCustomLyrics(customLyricsText, knownDuration);
+  }, [customLyricsText, knownDuration]);
+
+  useEffect(() => {
+    activeIndexRef.current = 0;
+    setActiveIndex(0);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [cues]);
 
   useEffect(() => {
     let animationFrameId: number;
 
     const findCueIndex = (currentTime: number): number => {
       let idx = 0;
-      for (let i = 0; i < LYRIC_CUES.length; i++) {
-        if (currentTime >= LYRIC_CUES[i].time - 0.15) {
+      for (let i = 0; i < cues.length; i++) {
+        if (currentTime >= cues[i].time - 0.15) {
           idx = i;
         } else {
           break;
@@ -89,6 +161,13 @@ export const BackgroundLyrics: React.FC = () => {
     };
 
     const tick = () => {
+      if (!hasTimestamps) {
+        const liveDur = soundtrackEngine.getDuration();
+        if (Math.abs(liveDur - knownDuration) > 1.5) {
+          setKnownDuration(liveDur);
+        }
+      }
+
       const currentTime = soundtrackEngine.getCurrentTime();
       const nextIdx = findCueIndex(currentTime);
 
@@ -100,7 +179,6 @@ export const BackgroundLyrics: React.FC = () => {
       const container = scrollRef.current;
       const targetLine = lineRefs.current[nextIdx];
       if (container && targetLine) {
-        // Center the active lyric line vertically inside the viewport
         const containerHeight = container.clientHeight;
         const targetTop =
           targetLine.offsetTop - containerHeight / 2 + targetLine.offsetHeight / 2;
@@ -108,7 +186,6 @@ export const BackgroundLyrics: React.FC = () => {
         const diff = clampedTarget - container.scrollTop;
 
         if (Math.abs(diff) > 0.5) {
-          // Smooth easing interpolation toward active lyric line
           container.scrollTop += diff * 0.085;
         }
       }
@@ -118,7 +195,7 @@ export const BackgroundLyrics: React.FC = () => {
 
     animationFrameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrameId);
-  }, []);
+  }, [cues, hasTimestamps, knownDuration]);
 
   return (
     <div className="absolute inset-0 z-0 pointer-events-none select-none overflow-hidden flex justify-center w-full">
@@ -131,7 +208,7 @@ export const BackgroundLyrics: React.FC = () => {
         className="w-full max-w-full h-full overflow-y-hidden no-scrollbar flex flex-col items-center justify-start z-0 relative"
       >
         <div className="w-full max-w-full flex flex-col items-center gap-10 sm:gap-14 text-center px-4 sm:px-8 py-[46vh]">
-          {LYRIC_CUES.map((cue, idx) => {
+          {cues.map((cue, idx) => {
             const isActive = idx === activeIndex;
             const isPast = idx < activeIndex;
             const isKorean = /[가-힣]/.test(cue.text);
