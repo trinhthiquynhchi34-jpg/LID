@@ -413,7 +413,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
             src={cameraCutoutUrl || POLAROID_CAMERA_SRC}
             alt="Polaroid Now"
             draggable={false}
-            className={`w-full h-full object-contain drop-shadow-[0_18px_38px_rgba(0,0,0,0.85)] transition-opacity duration-200 ${
+            className={`w-full h-full object-contain transition-opacity duration-200 ${
               cameraCutoutUrl ? 'opacity-100' : 'opacity-0'
             }`}
           />
@@ -442,7 +442,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
             className={`absolute rounded-full cursor-pointer active:scale-95 transition-all z-10 ${
               isCameraSoundOn
                 ? 'hover:ring-2 hover:ring-white/65'
-                : 'bg-black/40 ring-2 ring-white/45 hover:ring-amber-300/85'
+                : 'ring-2 ring-white/55 hover:ring-amber-300/85'
             }`}
           />
 
@@ -471,7 +471,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
             className={`absolute rounded-full cursor-pointer active:scale-90 transition-all z-10 ${
               isMusicPlaying
                 ? 'hover:ring-2 hover:ring-red-300/80'
-                : 'bg-black/40 ring-2 ring-white/55 hover:ring-amber-300/90'
+                : 'ring-2 ring-white/55 hover:ring-amber-300/90'
             }`}
           />
 
@@ -521,7 +521,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
                   onTogglePlay();
                 }}
                 title={isPlaying ? 'Nhấn để tạm dừng chụp tự động' : 'Nhấn để tiếp tục chụp tự động'}
-                className="relative origin-top w-52 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.92)] border border-neutral-300/60 cursor-pointer"
+                className="relative origin-top w-52 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] border border-neutral-300/60 cursor-pointer"
               >
                 <div className="relative w-full aspect-[16/10] bg-[#0b0d12] overflow-hidden shadow-inner">
                   <motion.img
@@ -600,9 +600,9 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
                     snapPhoto(item.index);
                   }}
                   title={`Chụp lại tấm #${item.index + 1}`}
-                  className={`shrink-0 w-52 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] shadow-[0_18px_42px_rgba(0,0,0,0.88)] border transition-shadow ${
+                  className={`shrink-0 w-52 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] border transition-colors ${
                     isLatestPrinted
-                      ? 'border-amber-400 ring-2 ring-amber-400/60 shadow-amber-500/20'
+                      ? 'border-amber-400 ring-2 ring-amber-400/60'
                       : 'border-neutral-300/50 hover:border-amber-300/80'
                   }`}
                 >

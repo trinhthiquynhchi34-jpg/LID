@@ -201,14 +201,10 @@ export const BackgroundLyrics: React.FC<BackgroundLyricsProps> = ({
 
   return (
     <div className="absolute inset-0 z-0 pointer-events-none select-none overflow-hidden flex justify-center w-full">
-      {/* Background Ambient Radial Glow */}
-      <div
-        className={`absolute inset-0 pointer-events-none z-0 ${
-          hasCustomBackground
-            ? 'bg-black/35'
-            : 'bg-radial from-amber-950/20 via-[#030303]/50 to-[#030303]'
-        }`}
-      />
+      {/* Background Ambient Radial Glow (only for default black background) */}
+      {!hasCustomBackground && (
+        <div className="absolute inset-0 pointer-events-none z-0 bg-radial from-amber-950/20 via-[#030303]/50 to-[#030303]" />
+      )}
 
       {/* Centered Lyrics Stream fitted to viewport, synced to real audio */}
       <div
