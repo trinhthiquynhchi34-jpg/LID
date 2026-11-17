@@ -19,6 +19,7 @@ interface PolaroidCameraStageProps {
   onToggleMusic: () => void;
   onAddPhotos: (newPhotos: FilmPhoto[]) => void;
   onOpenMediaModal: () => void;
+  onOpenBackgroundModal: () => void;
 }
 
 interface ActiveShot {
@@ -44,6 +45,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
   onToggleMusic,
   onAddPhotos,
   onOpenMediaModal,
+  onOpenBackgroundModal,
 }) => {
   const photos = roll.photos;
   const [activeShot, setActiveShot] = useState<ActiveShot | null>(null);
@@ -321,8 +323,9 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
     fileInputRef.current?.click();
   };
 
-  const handleCameraBodyClick = () => {
-    snapPhoto();
+  const handleCameraBodyClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onOpenBackgroundModal();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -394,7 +397,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
 
       {/* Center Stage: Polaroid Now Camera flush to top + Active Ejecting Photo */}
       <div className="relative z-20 flex-1 flex flex-col items-center justify-start min-h-0">
-        {/* Polaroid Now Camera — lens selects/replaces photos, red toggles music, flash toggles camera sound, purple changes music & lyrics */}
+        {/* Polaroid Now Camera — body chooses background; lens selects photos; red toggles music; flash toggles camera sound; purple changes music & lyrics */}
         <motion.div
           onClick={handleCameraBodyClick}
           animate={
@@ -403,7 +406,7 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
               : { y: 0, scale: 1 }
           }
           transition={{ duration: 0.25 }}
-          title="Bấm thân máy để chụp ảnh • Bấm ống kính để chọn ảnh • Nút đỏ: nhạc • Flash: âm thanh • Nút tím: đổi nhạc & lyrics"
+          title="Bấm máy ảnh để chọn Background • Ống kính: chọn ảnh • Nút đỏ: nhạc • Flash: âm thanh • Nút tím: đổi nhạc & lyrics"
           className="relative z-20 w-[132px] sm:w-[156px] md:w-[172px] lg:w-[186px] aspect-[454/425] cursor-pointer group shrink-0"
         >
           <img
@@ -513,7 +516,10 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
                   times: [0, 0.52, 1],
                   ease: ['easeOut', [0.22, 1, 0.36, 1]],
                 }}
-                onClick={onTogglePlay}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTogglePlay();
+                }}
                 title={isPlaying ? 'Nhấn để tạm dừng chụp tự động' : 'Nhấn để tiếp tục chụp tự động'}
                 className="relative origin-top w-52 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.92)] border border-neutral-300/60 cursor-pointer"
               >

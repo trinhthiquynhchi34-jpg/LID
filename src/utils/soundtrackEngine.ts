@@ -77,12 +77,33 @@ class SoundtrackEngine {
     } else if (trackId !== 'custom') {
       this.customTrackUrl = null;
     }
-    if (wasPlaying) {
+    if (wasPlaying && (trackId !== 'none' && (trackId !== 'custom' || this.customTrackUrl))) {
       this.play();
     }
   }
 
+  public clearTrack() {
+    this.stop();
+    this.currentTrackId = 'none';
+    this.customTrackUrl = null;
+    if (this.audioElement) {
+      this.audioElement.pause();
+      this.audioElement.removeAttribute('src');
+      this.audioElement.load();
+    }
+  }
+
+  public hasActiveAudio(): boolean {
+    if (this.currentTrackId === 'none') return false;
+    if (this.currentTrackId === 'custom') return Boolean(this.customTrackUrl);
+    const preset = PRESET_SOUNDTRACKS.find((p) => p.id === this.currentTrackId);
+    return Boolean(this.customTrackUrl || preset?.audioUrl);
+  }
+
   public togglePlay(): boolean {
+    if (!this.hasActiveAudio()) {
+      return false;
+    }
     if (this.getIsPlaying()) {
       this.stop();
       return false;
@@ -93,6 +114,11 @@ class SoundtrackEngine {
   }
 
   public play() {
+    if (!this.hasActiveAudio() && (this.currentTrackId === 'none' || this.currentTrackId === 'custom')) {
+      this.isPlaying = false;
+      return;
+    }
+
     this.init();
     this.isPlaying = true;
 

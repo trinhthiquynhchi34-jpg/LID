@@ -3,70 +3,57 @@ import { motion, AnimatePresence } from 'motion/react';
 import { INITIAL_FILM_ROLLS } from './data/defaultFilms';
 import { FilmPhoto, FilmRoll } from './types/film';
 import { PolaroidCameraStage } from './components/PolaroidCameraStage';
-import { BackgroundLyrics, DEFAULT_LYRIC_CUES } from './components/BackgroundLyrics';
+import { BackgroundLyrics } from './components/BackgroundLyrics';
 import { soundtrackEngine } from './utils/soundtrackEngine';
 import { filmAudio } from './utils/audio';
 
-const DEFAULT_TRACK_NAME = 'THAMA — Drawn (그려본다)';
-
-function formatDefaultLyricsText(): string {
-  return DEFAULT_LYRIC_CUES.map((cue) => {
-    const mins = Math.floor(cue.time / 60);
-    const secs = (cue.time % 60).toFixed(2).padStart(5, '0');
-    return `[${String(mins).padStart(2, '0')}:${secs}] ${cue.text}`;
-  }).join('\n');
-}
-
 export default function App() {
-  const [activeRoll, setActiveRoll] = useState<FilmRoll>(() => INITIAL_FILM_ROLLS[0]);
+  const [activeRoll, setActiveRoll] = useState<FilmRoll>(() => ({
+    ...INITIAL_FILM_ROLLS[0],
+    coverUrl: '',
+    customAudioUrl: undefined,
+    photos: [],
+  }));
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
-  const [isMusicPlaying, setIsMusicPlaying] = useState<boolean>(true);
+  const [isMusicPlaying, setIsMusicPlaying] = useState<boolean>(false);
   const [isMediaModalOpen, setIsMediaModalOpen] = useState<boolean>(false);
+  const [isBackgroundModalOpen, setIsBackgroundModalOpen] = useState<boolean>(false);
+  const [customBackgroundUrl, setCustomBackgroundUrl] = useState<string | null>(null);
 
-  const [trackName, setTrackName] = useState<string>(DEFAULT_TRACK_NAME);
-  const [customLyricsText, setCustomLyricsText] = useState<string | null>(null);
+  const [trackName, setTrackName] = useState<string>('');
+  const [customLyricsText, setCustomLyricsText] = useState<string>('');
 
   // Draft values inside the Music & Lyrics modal
   const [draftAudioFile, setDraftAudioFile] = useState<File | null>(null);
-  const [draftTrackName, setDraftTrackName] = useState<string>(DEFAULT_TRACK_NAME);
-  const [draftLyricsText, setDraftLyricsText] = useState<string>(() => formatDefaultLyricsText());
+  const [draftTrackName, setDraftTrackName] = useState<string>('');
+  const [draftLyricsText, setDraftLyricsText] = useState<string>('');
 
-  const userToggledMusicRef = useRef<boolean>(false);
   const customAudioObjectUrlRef = useRef<string | null>(null);
+  const customBackgroundObjectUrlRef = useRef<string | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const lyricsFileInputRef = useRef<HTMLInputElement | null>(null);
+  const backgroundInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Initialize and auto-unlock background music + film camera audio on mount
+  // Start clean with no preset music; unlock WebAudio camera sound on first user interaction
   useEffect(() => {
     soundtrackEngine.setVolume(0.7);
-    soundtrackEngine.selectTrack('thama-drawn', activeRoll.customAudioUrl);
-    soundtrackEngine.play();
-    setIsMusicPlaying(soundtrackEngine.getIsPlaying());
+    soundtrackEngine.clearTrack();
+    setIsMusicPlaying(false);
 
     const removeUnlockListeners = () => {
-      window.removeEventListener('pointerdown', unlockAudio);
-      window.removeEventListener('click', unlockAudio);
-      window.removeEventListener('keydown', unlockAudio);
+      window.removeEventListener('pointerdown', unlockCameraAudio);
+      window.removeEventListener('click', unlockCameraAudio);
+      window.removeEventListener('keydown', unlockCameraAudio);
     };
 
-    const unlockAudio = () => {
+    const unlockCameraAudio = () => {
       filmAudio.unlock();
-      if (userToggledMusicRef.current) {
-        removeUnlockListeners();
-        return;
-      }
-      if (!soundtrackEngine.getIsPlaying()) {
-        soundtrackEngine.play();
-      }
-      if (soundtrackEngine.getIsPlaying()) {
-        setIsMusicPlaying(true);
-        removeUnlockListeners();
-      }
+      removeUnlockListeners();
     };
 
-    window.addEventListener('pointerdown', unlockAudio);
-    window.addEventListener('click', unlockAudio);
-    window.addEventListener('keydown', unlockAudio);
+    window.addEventListener('pointerdown', unlockCameraAudio);
+    window.addEventListener('click', unlockCameraAudio);
+    window.addEventListener('keydown', unlockCameraAudio);
 
     return () => {
       removeUnlockListeners();
@@ -74,8 +61,11 @@ export default function App() {
         URL.revokeObjectURL(customAudioObjectUrlRef.current);
         customAudioObjectUrlRef.current = null;
       }
+      if (customBackgroundObjectUrlRef.current) {
+        URL.revokeObjectURL(customBackgroundObjectUrlRef.current);
+        customBackgroundObjectUrlRef.current = null;
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleToggleScroll = () => {
@@ -84,7 +74,6 @@ export default function App() {
 
   const handleToggleMusic = useCallback(() => {
     filmAudio.unlock();
-    userToggledMusicRef.current = true;
     const nowPlaying = soundtrackEngine.togglePlay();
     setIsMusicPlaying(nowPlaying);
   }, []);
@@ -100,9 +89,7 @@ export default function App() {
   const handleOpenMediaModal = useCallback(() => {
     setDraftAudioFile(null);
     setDraftTrackName(trackName);
-    setDraftLyricsText(
-      customLyricsText !== null ? customLyricsText : formatDefaultLyricsText()
-    );
+    setDraftLyricsText(customLyricsText);
     setIsMediaModalOpen(true);
   }, [trackName, customLyricsText]);
 
@@ -128,7 +115,6 @@ export default function App() {
 
   const handleApplyMedia = () => {
     filmAudio.unlock();
-    userToggledMusicRef.current = true;
 
     if (draftAudioFile) {
       const prevUrl = customAudioObjectUrlRef.current;
@@ -147,40 +133,29 @@ export default function App() {
       if (prevUrl) {
         URL.revokeObjectURL(prevUrl);
       }
-    } else if (!soundtrackEngine.getIsPlaying()) {
+    } else if (soundtrackEngine.hasActiveAudio() && !soundtrackEngine.getIsPlaying()) {
       soundtrackEngine.play();
       setIsMusicPlaying(true);
     }
 
-    const trimmedLyrics = draftLyricsText.trim();
-    const defaultFormatted = formatDefaultLyricsText().trim();
-    if (!trimmedLyrics) {
-      setCustomLyricsText('');
-    } else if (trimmedLyrics === defaultFormatted && !draftAudioFile && trackName === DEFAULT_TRACK_NAME) {
-      setCustomLyricsText(null);
-    } else {
-      setCustomLyricsText(draftLyricsText);
-    }
-
+    setCustomLyricsText(draftLyricsText);
     setIsMediaModalOpen(false);
   };
 
-  const handleResetDefaultMedia = () => {
+  const handleClearMedia = () => {
     filmAudio.unlock();
-    userToggledMusicRef.current = true;
 
     const prevUrl = customAudioObjectUrlRef.current;
     customAudioObjectUrlRef.current = null;
 
-    soundtrackEngine.selectTrack('thama-drawn');
-    soundtrackEngine.play();
-    setIsMusicPlaying(true);
+    soundtrackEngine.clearTrack();
+    setIsMusicPlaying(false);
 
-    setTrackName(DEFAULT_TRACK_NAME);
-    setCustomLyricsText(null);
+    setTrackName('');
+    setCustomLyricsText('');
     setDraftAudioFile(null);
-    setDraftTrackName(DEFAULT_TRACK_NAME);
-    setDraftLyricsText(formatDefaultLyricsText());
+    setDraftTrackName('');
+    setDraftLyricsText('');
     setActiveRoll((prev) => ({
       ...prev,
       customAudioUrl: undefined,
@@ -193,13 +168,68 @@ export default function App() {
     setIsMediaModalOpen(false);
   };
 
+  const handleOpenBackgroundModal = useCallback(() => {
+    setIsBackgroundModalOpen(true);
+  }, []);
+
+  const handleUseBlackBackground = () => {
+    const prevBgUrl = customBackgroundObjectUrlRef.current;
+    customBackgroundObjectUrlRef.current = null;
+    setCustomBackgroundUrl(null);
+    if (prevBgUrl) {
+      URL.revokeObjectURL(prevBgUrl);
+    }
+    setIsBackgroundModalOpen(false);
+  };
+
+  const handleBackgroundFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) {
+      e.target.value = '';
+      return;
+    }
+
+    const prevBgUrl = customBackgroundObjectUrlRef.current;
+    const nextBgUrl = URL.createObjectURL(file);
+    customBackgroundObjectUrlRef.current = nextBgUrl;
+    setCustomBackgroundUrl(nextBgUrl);
+
+    if (prevBgUrl) {
+      URL.revokeObjectURL(prevBgUrl);
+    }
+
+    e.target.value = '';
+    setIsBackgroundModalOpen(false);
+  };
+
   return (
     <div className="relative w-screen h-screen bg-[#030303] text-neutral-100 flex flex-col items-center justify-center overflow-hidden selection:bg-amber-500/20">
-      {/* Background Soft Glow */}
-      <div className="absolute inset-0 bg-radial from-amber-950/15 via-black/40 to-[#030303] pointer-events-none" />
+      {/* Hidden File Input for Custom Background Image */}
+      <input
+        ref={backgroundInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleBackgroundFilePick}
+        className="hidden"
+      />
+
+      {/* Custom User Background Image or Default Soft Glow */}
+      {customBackgroundUrl ? (
+        <img
+          src={customBackgroundUrl}
+          alt=""
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-radial from-amber-950/15 via-black/40 to-[#030303] pointer-events-none" />
+      )}
 
       {/* Audio-Synced Lyrics Backdrop Behind Camera & Photos */}
-      <BackgroundLyrics customLyricsText={customLyricsText} />
+      <BackgroundLyrics
+        customLyricsText={customLyricsText}
+        hasCustomBackground={Boolean(customBackgroundUrl)}
+      />
 
       {/* Main Screen: Polaroid Now Camera Snap & Enlarged Printed Photos */}
       <main className="relative z-10 w-full h-full flex flex-col items-center justify-center">
@@ -211,6 +241,7 @@ export default function App() {
           onToggleMusic={handleToggleMusic}
           onAddPhotos={handleAddPhotos}
           onOpenMediaModal={handleOpenMediaModal}
+          onOpenBackgroundModal={handleOpenBackgroundModal}
         />
       </main>
 
@@ -237,7 +268,7 @@ export default function App() {
                 <div className="flex items-center gap-2.5">
                   <span className="w-3 h-3 rounded-full bg-gradient-to-b from-purple-400 to-purple-700 ring-2 ring-purple-300/40" />
                   <h2 className="text-base font-semibold text-neutral-100">
-                    Thay nhạc &amp; Lyrics
+                    Chọn nhạc &amp; Lyrics
                   </h2>
                 </div>
                 <button
@@ -278,10 +309,14 @@ export default function App() {
                   <div className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.04] border border-white/10 px-3.5 py-2.5">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-neutral-100 truncate">
-                        {draftTrackName}
+                        {draftTrackName || 'Chưa chọn file nhạc'}
                       </p>
                       <p className="text-[11px] text-neutral-400 truncate">
-                        {draftAudioFile ? 'File nhạc mới đã sẵn sàng' : 'Bài hát đang phát'}
+                        {draftAudioFile
+                          ? 'File nhạc mới đã sẵn sàng'
+                          : trackName
+                            ? 'Bài hát đang chọn'
+                            : 'Chọn file âm thanh từ thiết bị của bạn'}
                       </p>
                     </div>
                     <button
@@ -334,10 +369,10 @@ export default function App() {
               <div className="flex items-center justify-between gap-2 px-5 py-3.5 bg-white/[0.02] border-t border-white/10">
                 <button
                   type="button"
-                  onClick={handleResetDefaultMedia}
+                  onClick={handleClearMedia}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 >
-                  Mặc định (THAMA)
+                  Xoá nhạc &amp; lyrics
                 </button>
                 <div className="flex items-center gap-2">
                   <button
@@ -360,7 +395,106 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Background Selection Modal (Opened by clicking empty stage space) */}
+      <AnimatePresence>
+        {isBackgroundModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsBackgroundModalOpen(false)}
+            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl bg-[#111114] border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.9)] overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                <h2 className="text-base font-semibold text-neutral-100">
+                  Chọn Background
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setIsBackgroundModalOpen(false)}
+                  aria-label="Đóng"
+                  className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Options */}
+              <div className="p-5 space-y-3">
+                {/* Option 1: Keep / Use Solid Black Background */}
+                <button
+                  type="button"
+                  onClick={handleUseBlackBackground}
+                  className={`w-full flex items-center gap-3.5 p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    !customBackgroundUrl
+                      ? 'bg-white/[0.08] border-amber-400/70 ring-1 ring-amber-400/40'
+                      : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.07]'
+                  }`}
+                >
+                  <span className="w-10 h-10 rounded-lg bg-[#030303] border border-white/25 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-neutral-100">
+                      Giữ nguyên nền đen
+                    </p>
+                    <p className="text-xs text-neutral-400">
+                      Sử dụng nền tối mặc định
+                    </p>
+                  </div>
+                </button>
+
+                {/* Option 2: Pick from Image File */}
+                <button
+                  type="button"
+                  onClick={() => backgroundInputRef.current?.click()}
+                  className={`w-full flex items-center gap-3.5 p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    customBackgroundUrl
+                      ? 'bg-white/[0.08] border-amber-400/70 ring-1 ring-amber-400/40'
+                      : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.07]'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-lg bg-white/10 border border-white/15 overflow-hidden flex items-center justify-center shrink-0">
+                    {customBackgroundUrl ? (
+                      <img
+                        src={customBackgroundUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <svg className="w-5 h-5 text-neutral-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-5-5L5 21" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-neutral-100">
+                      Chọn từ file ảnh
+                    </p>
+                    <p className="text-xs text-neutral-400">
+                      Tải ảnh từ thiết bị làm hình nền
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
 

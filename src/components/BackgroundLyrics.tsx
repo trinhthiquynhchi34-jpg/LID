@@ -118,9 +118,13 @@ function parseCustomLyrics(rawText: string, trackDuration: number): { cues: Lyri
 
 interface BackgroundLyricsProps {
   customLyricsText?: string | null;
+  hasCustomBackground?: boolean;
 }
 
-export const BackgroundLyrics: React.FC<BackgroundLyricsProps> = ({ customLyricsText }) => {
+export const BackgroundLyrics: React.FC<BackgroundLyricsProps> = ({
+  customLyricsText,
+  hasCustomBackground = false,
+}) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [activeIndex, setActiveIndex] = useState<number>(0);
@@ -128,10 +132,7 @@ export const BackgroundLyrics: React.FC<BackgroundLyricsProps> = ({ customLyrics
   const [knownDuration, setKnownDuration] = useState<number>(() => soundtrackEngine.getDuration());
 
   const { cues, hasTimestamps } = useMemo(() => {
-    if (customLyricsText === undefined || customLyricsText === null) {
-      return { cues: DEFAULT_LYRIC_CUES, hasTimestamps: true };
-    }
-    if (!customLyricsText.trim()) {
+    if (!customLyricsText || !customLyricsText.trim()) {
       return { cues: [], hasTimestamps: true };
     }
     return parseCustomLyrics(customLyricsText, knownDuration);
@@ -146,6 +147,7 @@ export const BackgroundLyrics: React.FC<BackgroundLyricsProps> = ({ customLyrics
   }, [cues]);
 
   useEffect(() => {
+    if (cues.length === 0) return;
     let animationFrameId: number;
 
     const findCueIndex = (currentTime: number): number => {
@@ -200,7 +202,13 @@ export const BackgroundLyrics: React.FC<BackgroundLyricsProps> = ({ customLyrics
   return (
     <div className="absolute inset-0 z-0 pointer-events-none select-none overflow-hidden flex justify-center w-full">
       {/* Background Ambient Radial Glow */}
-      <div className="absolute inset-0 bg-radial from-amber-950/20 via-[#030303]/50 to-[#030303] pointer-events-none z-0" />
+      <div
+        className={`absolute inset-0 pointer-events-none z-0 ${
+          hasCustomBackground
+            ? 'bg-black/35'
+            : 'bg-radial from-amber-950/20 via-[#030303]/50 to-[#030303]'
+        }`}
+      />
 
       {/* Centered Lyrics Stream fitted to viewport, synced to real audio */}
       <div
@@ -250,8 +258,12 @@ export const BackgroundLyrics: React.FC<BackgroundLyricsProps> = ({ customLyrics
       </div>
 
       {/* Soft Vignettes at Top and Bottom */}
-      <div className="absolute top-0 left-0 right-0 h-28 bg-gradient-to-b from-[#030303] via-[#030303]/85 to-transparent z-10 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#030303] via-[#030303]/90 to-transparent z-10 pointer-events-none" />
+      {!hasCustomBackground && (
+        <>
+          <div className="absolute top-0 left-0 right-0 h-28 bg-gradient-to-b from-[#030303] via-[#030303]/85 to-transparent z-10 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#030303] via-[#030303]/90 to-transparent z-10 pointer-events-none" />
+        </>
+      )}
     </div>
   );
 };
