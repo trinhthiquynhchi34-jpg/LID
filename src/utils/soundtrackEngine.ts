@@ -47,7 +47,21 @@ class SoundtrackEngine {
   }
 
   public getIsPlaying(): boolean {
+    if (this.audioElement) {
+      return !this.audioElement.paused && !this.audioElement.ended;
+    }
     return this.isPlaying;
+  }
+
+  public getCurrentTime(): number {
+    return this.audioElement ? this.audioElement.currentTime : 0;
+  }
+
+  public getDuration(): number {
+    if (this.audioElement && Number.isFinite(this.audioElement.duration) && this.audioElement.duration > 0) {
+      return this.audioElement.duration;
+    }
+    return 231.39;
   }
 
   public getCurrentTrackId(): string {
@@ -69,7 +83,7 @@ class SoundtrackEngine {
   }
 
   public togglePlay(): boolean {
-    if (this.isPlaying) {
+    if (this.getIsPlaying()) {
       this.stop();
       return false;
     } else {
@@ -110,14 +124,24 @@ class SoundtrackEngine {
     if (!this.audioElement) {
       this.audioElement = new Audio();
       this.audioElement.loop = true;
+      this.audioElement.preload = 'auto';
+      this.audioElement.addEventListener('play', () => {
+        this.isPlaying = true;
+      });
+      this.audioElement.addEventListener('pause', () => {
+        this.isPlaying = false;
+      });
     }
     if (this.audioElement.src !== url && !this.audioElement.src.endsWith(url)) {
       this.audioElement.src = url;
     }
     this.audioElement.volume = this.volume;
-    this.audioElement.play().catch((err) => {
-      console.warn('Audio play auto-play policy:', err);
-    });
+    const playPromise = this.audioElement.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        this.isPlaying = false;
+      });
+    }
   }
 
   private startProceduralMusic(trackId: string) {

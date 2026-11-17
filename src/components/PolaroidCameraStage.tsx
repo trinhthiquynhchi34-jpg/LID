@@ -1,0 +1,500 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { FilmRoll, FilmPhoto } from '../types/film';
+import { filmAudio } from '../utils/audio';
+
+const POLAROID_CAMERA_SRC = '/assets/aistudio/image_4956bb62.png';
+
+// Crop region in 828x828 source image containing the Polaroid Now camera body
+const CROP_X = 188;
+const CROP_Y = 182;
+const CROP_W = 454;
+const CROP_H = 435;
+
+interface PolaroidCameraStageProps {
+  roll: FilmRoll;
+  isPlaying: boolean;
+  onTogglePlay: () => void;
+}
+
+interface ActiveShot {
+  photo: FilmPhoto;
+  index: number;
+  shotId: number;
+}
+
+interface PrintedItem {
+  photo: FilmPhoto;
+  printKey: number;
+  index: number;
+  tilt: number;
+}
+
+const TILTS = [-2.6, 2.1, -1.5, 2.5, -2.0, 1.4, -2.3, 1.8];
+
+export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
+  roll,
+  isPlaying,
+  onTogglePlay,
+}) => {
+  const photos = roll.photos;
+  const [activeShot, setActiveShot] = useState<ActiveShot | null>(null);
+  const [isFlashing, setIsFlashing] = useState<boolean>(false);
+  const [isDeveloping, setIsDeveloping] = useState<boolean>(false);
+  const [printedHistory, setPrintedHistory] = useState<PrintedItem[]>([]);
+  const [cameraCutoutUrl, setCameraCutoutUrl] = useState<string | null>(null);
+
+  const nextIndexRef = useRef<number>(0);
+  const shotIdRef = useRef<number>(0);
+  const activeShotRef = useRef<ActiveShot | null>(null);
+  const committedShotIdRef = useRef<number>(0);
+
+  const autoTimerRef = useRef<number | null>(null);
+  const flashTimerRef = useRef<number | null>(null);
+  const developTimerRef = useRef<number | null>(null);
+  const commitTimerRef = useRef<number | null>(null);
+  const trayScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Remove outer white studio background from the Polaroid Now PNG using edge flood-fill
+  useEffect(() => {
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = POLAROID_CAMERA_SRC;
+
+    img.onload = () => {
+      if (cancelled) return;
+      try {
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        const srcCanvas = document.createElement('canvas');
+        srcCanvas.width = w;
+        srcCanvas.height = h;
+        const srcCtx = srcCanvas.getContext('2d');
+        if (!srcCtx) return;
+
+        srcCtx.drawImage(img, 0, 0);
+        const imageData = srcCtx.getImageData(0, 0, w, h);
+        const data = imageData.data;
+
+        const visited = new Uint8Array(w * h);
+        const removed = new Uint8Array(w * h);
+        const queue = new Int32Array(w * h);
+        let head = 0;
+        let tail = 0;
+
+        const isNearWhite = (idx: number) => {
+          const p = idx * 4;
+          return data[p] >= 246 && data[p + 1] >= 246 && data[p + 2] >= 246;
+        };
+
+        const enqueueIfWhite = (x: number, y: number) => {
+          const idx = y * w + x;
+          if (!visited[idx] && isNearWhite(idx)) {
+            visited[idx] = 1;
+            queue[tail++] = idx;
+          }
+        };
+
+        for (let x = 0; x < w; x++) {
+          enqueueIfWhite(x, 0);
+          enqueueIfWhite(x, h - 1);
+        }
+        for (let y = 0; y < h; y++) {
+          enqueueIfWhite(0, y);
+          enqueueIfWhite(w - 1, y);
+        }
+
+        while (head < tail) {
+          const idx = queue[head++];
+          removed[idx] = 1;
+          data[idx * 4 + 3] = 0;
+
+          const x = idx % w;
+          const y = (idx - x) / w;
+
+          if (x > 0) enqueueIfWhite(x - 1, y);
+          if (x < w - 1) enqueueIfWhite(x + 1, y);
+          if (y > 0) enqueueIfWhite(x, y - 1);
+          if (y < h - 1) enqueueIfWhite(x, y + 1);
+        }
+
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const idx = y * w + x;
+            if (removed[idx]) continue;
+            const touchesBg =
+              removed[idx - 1] ||
+              removed[idx + 1] ||
+              removed[idx - w] ||
+              removed[idx + w];
+            if (touchesBg) {
+              const p = idx * 4;
+              const minChan = Math.min(data[p], data[p + 1], data[p + 2]);
+              if (minChan >= 232) {
+                const factor = Math.max(0, Math.min(1, (248 - minChan) / 16));
+                data[p + 3] = Math.round(255 * factor);
+              }
+            }
+          }
+        }
+
+        srcCtx.putImageData(imageData, 0, 0);
+
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = CROP_W;
+        outCanvas.height = CROP_H;
+        const outCtx = outCanvas.getContext('2d');
+        if (!outCtx) return;
+
+        outCtx.drawImage(
+          srcCanvas,
+          CROP_X,
+          CROP_Y,
+          CROP_W,
+          CROP_H,
+          0,
+          0,
+          CROP_W,
+          CROP_H
+        );
+
+        setCameraCutoutUrl(outCanvas.toDataURL('image/png'));
+      } catch {
+        // Fallback to raw image
+      }
+    };
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const commitShotToTray = useCallback((shot: ActiveShot) => {
+    if (committedShotIdRef.current >= shot.shotId) return;
+    committedShotIdRef.current = shot.shotId;
+
+    setPrintedHistory((prev) => {
+      const tilt = TILTS[shot.shotId % TILTS.length];
+      const nextItem: PrintedItem = {
+        photo: shot.photo,
+        printKey: shot.shotId,
+        index: shot.index,
+        tilt,
+      };
+      const filtered = prev.filter((item) => item.index !== shot.index);
+      return [...filtered, nextItem].slice(-7);
+    });
+  }, []);
+
+  const snapPhoto = useCallback(
+    (targetIdx?: number) => {
+      if (!photos.length) return;
+
+      // If a previous shot was still in the chute (e.g. rapid manual click), place it below first
+      if (activeShotRef.current) {
+        commitShotToTray(activeShotRef.current);
+      }
+
+      if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+      if (developTimerRef.current) window.clearTimeout(developTimerRef.current);
+      if (commitTimerRef.current) window.clearTimeout(commitTimerRef.current);
+
+      const idx =
+        targetIdx !== undefined
+          ? targetIdx % photos.length
+          : nextIndexRef.current % photos.length;
+      nextIndexRef.current = (idx + 1) % photos.length;
+
+      const shotId = ++shotIdRef.current;
+      const newShot: ActiveShot = {
+        photo: photos[idx],
+        index: idx,
+        shotId,
+      };
+      activeShotRef.current = newShot;
+
+      // 1. Camera flash + shutter snap sound FIRST
+      setIsFlashing(true);
+      setIsDeveloping(true);
+      setActiveShot(newShot);
+      filmAudio.playPolaroidSnap();
+
+      flashTimerRef.current = window.setTimeout(() => {
+        setIsFlashing(false);
+      }, 340);
+
+      // 2. Chemical development finishes at ~2.2s
+      developTimerRef.current = window.setTimeout(() => {
+        setIsDeveloping(false);
+      }, 2200);
+
+      // 3. Only AFTER taking & printing finishes (~3.0s), drop the photo down into the bottom gallery
+      commitTimerRef.current = window.setTimeout(() => {
+        commitShotToTray(newShot);
+        if (activeShotRef.current?.shotId === newShot.shotId) {
+          activeShotRef.current = null;
+          setActiveShot(null);
+        }
+      }, 3000);
+    },
+    [photos, commitShotToTray]
+  );
+
+  // Keep newest printed photo scrolled into view
+  useEffect(() => {
+    const el = trayScrollRef.current;
+    if (!el) return;
+    el.scrollTo({
+      left: el.scrollWidth,
+      behavior: 'smooth',
+    });
+  }, [printedHistory]);
+
+  // Clear pending timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autoTimerRef.current) window.clearInterval(autoTimerRef.current);
+      if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+      if (developTimerRef.current) window.clearTimeout(developTimerRef.current);
+      if (commitTimerRef.current) window.clearTimeout(commitTimerRef.current);
+    };
+  }, []);
+
+  // Auto-snap loop: take photo -> eject & develop -> drop below -> repeat
+  useEffect(() => {
+    if (!isPlaying) {
+      if (autoTimerRef.current) {
+        window.clearInterval(autoTimerRef.current);
+        autoTimerRef.current = null;
+      }
+      return;
+    }
+
+    const initialSnapTimeout =
+      shotIdRef.current === 0
+        ? window.setTimeout(() => {
+            snapPhoto();
+          }, 550)
+        : null;
+
+    autoTimerRef.current = window.setInterval(() => {
+      snapPhoto();
+    }, 4800);
+
+    return () => {
+      if (initialSnapTimeout) window.clearTimeout(initialSnapTimeout);
+      if (autoTimerRef.current) {
+        window.clearInterval(autoTimerRef.current);
+        autoTimerRef.current = null;
+      }
+    };
+  }, [isPlaying, snapPhoto]);
+
+  const handleManualSnap = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    snapPhoto();
+  };
+
+  return (
+    <div className="relative w-full h-full flex flex-col items-center justify-between py-4 sm:py-6 select-none overflow-hidden px-2">
+      {/* Soft Full-Screen Camera Flash Overlay */}
+      <AnimatePresence>
+        {isFlashing && activeShot && (
+          <motion.div
+            key={`flash-${activeShot.shotId}`}
+            initial={{ opacity: 0.65 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            className="fixed inset-0 bg-amber-50 pointer-events-none z-50"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Center Stage: Polaroid Now Camera + Active Ejecting Photo */}
+      <div className="relative z-20 flex-1 flex flex-col items-center justify-center min-h-0">
+        {/* Polaroid Now Camera */}
+        <motion.div
+          onClick={handleManualSnap}
+          animate={
+            isFlashing
+              ? { y: [0, 3, 0], scale: [1, 0.985, 1] }
+              : { y: 0, scale: 1 }
+          }
+          transition={{ duration: 0.25 }}
+          title="Nhấn vào máy ảnh để chụp ảnh"
+          className="relative z-20 w-[176px] sm:w-[214px] md:w-[234px] aspect-[454/435] cursor-pointer group shrink-0"
+        >
+          <img
+            src={cameraCutoutUrl || POLAROID_CAMERA_SRC}
+            alt="Polaroid Now"
+            draggable={false}
+            className={`w-full h-full object-contain drop-shadow-[0_18px_38px_rgba(0,0,0,0.85)] transition-opacity duration-200 ${
+              cameraCutoutUrl ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+
+          {/* Xenon Flash Glow right over the camera flash window */}
+          <AnimatePresence>
+            {isFlashing && activeShot && (
+              <motion.div
+                key={`lens-flash-${activeShot.shotId}`}
+                initial={{ opacity: 1, scale: 0.85 }}
+                animate={{ opacity: 0, scale: 1.5 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.35, ease: 'easeOut' }}
+                style={{ left: '4.5%', top: '8.8%', width: '23%', height: '24%' }}
+                className="absolute rounded-full bg-white shadow-[0_0_50px_22px_rgba(255,255,255,0.95)] pointer-events-none"
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Interactive Red Shutter Button Hotspot */}
+          <button
+            type="button"
+            onClick={handleManualSnap}
+            aria-label="Chụp ảnh Polaroid"
+            title="Bấm nút đỏ để chụp tách!"
+            style={{ left: '11.5%', top: '40%', width: '10.8%', height: '9.8%' }}
+            className="absolute rounded-full cursor-pointer hover:ring-2 hover:ring-red-300/70 active:scale-90 transition-transform"
+          />
+        </motion.div>
+
+        {/* Ejection Chute: photo slides out AFTER shutter flashes, then drops down to the tray */}
+        <div
+          className="relative z-30 -mt-[23px] sm:-mt-[28px] md:-mt-[31px] pt-[16px] sm:pt-[20px] md:pt-[22px] px-4 pb-2 min-h-[185px] sm:min-h-[225px] md:min-h-[248px] overflow-hidden flex flex-col items-center shrink-0"
+          style={{ transform: 'translateX(1.5%)' }}
+        >
+          <AnimatePresence mode="wait">
+            {activeShot && (
+              <motion.div
+                key={`polaroid-${activeShot.shotId}-${activeShot.photo.id}`}
+                initial={{ y: -230, opacity: 0.96, scale: 0.95, rotate: -1.2 }}
+                animate={{
+                  y: 0,
+                  opacity: 1,
+                  scale: 1,
+                  rotate: activeShot.shotId % 2 === 0 ? 1.1 : -1.1,
+                }}
+                exit={{
+                  y: 120,
+                  opacity: 0,
+                  scale: 0.72,
+                  transition: { duration: 0.42, ease: [0.4, 0, 1, 1] },
+                }}
+                transition={{
+                  y: { duration: 1.0, delay: 0.12, ease: [0.22, 1, 0.36, 1] },
+                  rotate: { duration: 1.05, delay: 0.12, ease: 'easeOut' },
+                  opacity: { duration: 0.25, delay: 0.1 },
+                }}
+                onClick={onTogglePlay}
+                title={isPlaying ? 'Nhấn để tạm dừng chụp tự động' : 'Nhấn để tiếp tục chụp tự động'}
+                className="relative w-[205px] sm:w-[252px] md:w-[276px] bg-[#faf7f0] p-2 sm:p-2.5 pb-6 sm:pb-7 rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.92)] border border-neutral-300/60 cursor-pointer"
+              >
+                <div className="relative w-full aspect-[16/10] bg-[#0b0d12] overflow-hidden shadow-inner">
+                  <motion.img
+                    src={activeShot.photo.url}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    draggable={false}
+                    initial={{
+                      filter: 'brightness(0.12) contrast(0.7) saturate(0.15) blur(4px)',
+                    }}
+                    animate={{
+                      filter: 'brightness(1) contrast(1.04) saturate(1.06) blur(0px)',
+                    }}
+                    transition={{ duration: 1.9, delay: 0.38, ease: 'easeOut' }}
+                    style={{
+                      objectPosition: activeShot.photo.objectPosition || 'center',
+                      objectFit: activeShot.photo.objectFit || 'cover',
+                      transform: `scale(${activeShot.photo.zoom || 1}) translate(${activeShot.photo.panX || 0}%, ${activeShot.photo.panY || 0}%)`,
+                      transformOrigin: 'center center',
+                    }}
+                    className="w-full h-full object-cover"
+                  />
+
+                  {/* Chemical Development Dark Wash Layer */}
+                  <motion.div
+                    initial={{ opacity: 0.94 }}
+                    animate={{ opacity: 0 }}
+                    transition={{ duration: 1.85, delay: 0.32, ease: 'easeInOut' }}
+                    className="absolute inset-0 bg-[#121620] pointer-events-none"
+                  />
+
+                  {/* Subtle Photo Sheen */}
+                  <div className="absolute inset-0 bg-gradient-to-tr from-black/15 via-transparent to-white/10 pointer-events-none" />
+                </div>
+
+                {/* Minimal Film Counter Stamp */}
+                <div className="absolute bottom-1.5 sm:bottom-2 left-2.5 right-2.5 flex items-center justify-between font-mono text-[9px] sm:text-[10px] tracking-widest text-neutral-400">
+                  <span>
+                    {String(activeShot.index + 1).padStart(2, '0')} / {String(photos.length).padStart(2, '0')}
+                  </span>
+                  <span className="text-[8px] uppercase text-neutral-400/80">
+                    {isDeveloping ? 'DEVELOPING...' : 'PRINTED'}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Bottom Enlarged Printed Polaroid Gallery — only populated AFTER a shot completes */}
+      <div
+        ref={trayScrollRef}
+        className="relative z-20 w-full min-h-[126px] sm:min-h-[164px] md:min-h-[188px] overflow-x-auto no-scrollbar shrink-0 pb-1 sm:pb-2 flex items-center"
+      >
+        {printedHistory.length > 0 && (
+          <div className="w-max mx-auto flex items-center gap-3 sm:gap-4 md:gap-5 px-5 py-3">
+            {printedHistory.map((item) => {
+              const isLatestPrinted =
+                printedHistory[printedHistory.length - 1]?.printKey === item.printKey;
+              return (
+                <motion.button
+                  key={`${item.photo.id}-${item.printKey}`}
+                  type="button"
+                  initial={{ opacity: 0, y: -28, scale: 0.85 }}
+                  animate={{
+                    opacity: isLatestPrinted ? 1 : 0.88,
+                    y: 0,
+                    scale: isLatestPrinted ? 1.04 : 1,
+                    rotate: item.tilt,
+                  }}
+                  whileHover={{ scale: 1.09, opacity: 1, rotate: 0 }}
+                  transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    snapPhoto(item.index);
+                  }}
+                  title={`Chụp lại tấm #${item.index + 1}`}
+                  className={`shrink-0 w-36 sm:w-48 md:w-56 bg-[#faf7f0] p-1.5 sm:p-2 pb-4 sm:pb-5 rounded-[3px] shadow-[0_14px_34px_rgba(0,0,0,0.85)] border transition-shadow ${
+                    isLatestPrinted
+                      ? 'border-amber-400 ring-2 ring-amber-400/60 shadow-amber-500/20'
+                      : 'border-neutral-300/50 hover:border-amber-300/80'
+                  }`}
+                >
+                  <div className="w-full aspect-[16/10] bg-neutral-900 overflow-hidden">
+                    <img
+                      src={item.photo.url}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      draggable={false}
+                      style={{
+                        objectPosition: item.photo.objectPosition || 'center',
+                        transform: `scale(${item.photo.zoom || 1})`,
+                        transformOrigin: 'center center',
+                      }}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

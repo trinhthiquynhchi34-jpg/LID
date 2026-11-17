@@ -153,6 +153,71 @@ class FilmAudioEngine {
       // safe
     }
   }
+
+  // Play Polaroid shutter "tách!" + short mechanical ejection whir
+  public playPolaroidSnap() {
+    try {
+      this.initContext();
+      if (!this.ctx || this.ctx.state === 'suspended') return;
+
+      const now = this.ctx.currentTime;
+
+      // 1. Crisp mechanical shutter click ("tách!")
+      const clickBufferSize = Math.floor(this.ctx.sampleRate * 0.045);
+      const clickBuffer = this.ctx.createBuffer(1, clickBufferSize, this.ctx.sampleRate);
+      const clickData = clickBuffer.getChannelData(0);
+      for (let i = 0; i < clickBufferSize; i++) {
+        const env = Math.exp(-i / (clickBufferSize * 0.22));
+        clickData[i] = (Math.random() * 2 - 1) * env;
+      }
+
+      const clickNoise = this.ctx.createBufferSource();
+      clickNoise.buffer = clickBuffer;
+
+      const clickFilter = this.ctx.createBiquadFilter();
+      clickFilter.type = 'bandpass';
+      clickFilter.frequency.setValueAtTime(1800, now);
+      clickFilter.Q.setValueAtTime(1.2, now);
+
+      const clickGain = this.ctx.createGain();
+      clickGain.gain.setValueAtTime(0.28, now);
+      clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+
+      clickNoise.connect(clickFilter);
+      clickFilter.connect(clickGain);
+      clickGain.connect(this.ctx.destination);
+      clickNoise.start(now);
+
+      // 2. Short Polaroid roller motor whir ("rrrr...")
+      const motorStart = now + 0.06;
+      const motorDur = 0.65;
+
+      const motorOsc = this.ctx.createOscillator();
+      motorOsc.type = 'sawtooth';
+      motorOsc.frequency.setValueAtTime(135, motorStart);
+      motorOsc.frequency.linearRampToValueAtTime(155, motorStart + 0.15);
+      motorOsc.frequency.linearRampToValueAtTime(125, motorStart + motorDur);
+
+      const motorFilter = this.ctx.createBiquadFilter();
+      motorFilter.type = 'lowpass';
+      motorFilter.frequency.setValueAtTime(420, motorStart);
+
+      const motorGain = this.ctx.createGain();
+      motorGain.gain.setValueAtTime(0.001, motorStart);
+      motorGain.gain.linearRampToValueAtTime(0.045, motorStart + 0.05);
+      motorGain.gain.setValueAtTime(0.04, motorStart + motorDur - 0.12);
+      motorGain.gain.exponentialRampToValueAtTime(0.001, motorStart + motorDur);
+
+      motorOsc.connect(motorFilter);
+      motorFilter.connect(motorGain);
+      motorGain.connect(this.ctx.destination);
+
+      motorOsc.start(motorStart);
+      motorOsc.stop(motorStart + motorDur + 0.02);
+    } catch {
+      // Audio autoplay policy safe
+    }
+  }
 }
 
 export const filmAudio = new FilmAudioEngine();
