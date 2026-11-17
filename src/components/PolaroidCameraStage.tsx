@@ -238,14 +238,14 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
         setIsDeveloping(false);
       }, 2200);
 
-      // 3. Only AFTER taking & printing finishes (~3.0s), drop the photo down into the bottom gallery
+      // 3. After printing, expanding to full size, and developing (~3.25s), drop photo to bottom gallery
       commitTimerRef.current = window.setTimeout(() => {
         commitShotToTray(newShot);
         if (activeShotRef.current?.shotId === newShot.shotId) {
           activeShotRef.current = null;
           setActiveShot(null);
         }
-      }, 3000);
+      }, 3250);
     },
     [photos, commitShotToTray]
   );
@@ -430,20 +430,20 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
           />
         </motion.div>
 
-        {/* Ejection Chute: photo emerges from compact camera slot and expands to match bottom row size */}
+        {/* Ejection Chute: photo prints at exact slot width first, then expands smoothly to full size */}
         <div
-          className="relative z-30 -mt-[17px] sm:-mt-[20px] md:-mt-[22px] lg:-mt-[24px] pt-[14px] sm:pt-[17px] md:pt-[19px] lg:pt-[20px] translate-x-[2px] sm:translate-x-[3px] px-4 pb-2 min-h-[185px] sm:min-h-[225px] md:min-h-[248px] lg:min-h-[272px] overflow-hidden flex flex-col items-center shrink-0"
+          className="relative z-30 -mt-[17px] sm:-mt-[20px] md:-mt-[22px] lg:-mt-[24px] pt-[14px] sm:pt-[17px] md:pt-[19px] lg:pt-[20px] translate-x-[2px] sm:translate-x-[3px] px-6 pb-4 min-h-[195px] sm:min-h-[235px] md:min-h-[258px] lg:min-h-[282px] overflow-hidden flex flex-col items-center shrink-0"
         >
           <AnimatePresence mode="wait">
             {activeShot && (
               <motion.div
                 key={`polaroid-${activeShot.shotId}-${activeShot.photo.id}`}
-                initial={{ y: -235, opacity: 0.96, scale: 0.5, rotate: -1.2 }}
+                initial={{ y: -155, opacity: 0.96, scale: 0.49, rotate: 0 }}
                 animate={{
-                  y: 0,
-                  opacity: 1,
-                  scale: 1,
-                  rotate: activeShot.shotId % 2 === 0 ? 1.1 : -1.1,
+                  y: [-155, 0, 0],
+                  opacity: [0.96, 1, 1],
+                  scale: [0.49, 0.49, 1],
+                  rotate: [0, 0, activeShot.shotId % 2 === 0 ? 1.1 : -1.1],
                 }}
                 exit={{
                   y: 120,
@@ -452,14 +452,14 @@ export const PolaroidCameraStage: React.FC<PolaroidCameraStageProps> = ({
                   transition: { duration: 0.42, ease: [0.4, 0, 1, 1] },
                 }}
                 transition={{
-                  y: { duration: 1.0, delay: 0.12, ease: [0.22, 1, 0.36, 1] },
-                  scale: { duration: 0.95, delay: 0.14, ease: [0.22, 1, 0.36, 1] },
-                  rotate: { duration: 1.05, delay: 0.12, ease: 'easeOut' },
-                  opacity: { duration: 0.25, delay: 0.1 },
+                  duration: 1.85,
+                  delay: 0.12,
+                  times: [0, 0.52, 1],
+                  ease: ['easeOut', [0.22, 1, 0.36, 1]],
                 }}
                 onClick={onTogglePlay}
                 title={isPlaying ? 'Nhấn để tạm dừng chụp tự động' : 'Nhấn để tiếp tục chụp tự động'}
-                className="relative w-52 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.92)] border border-neutral-300/60 cursor-pointer"
+                className="relative origin-top w-52 sm:w-64 md:w-72 lg:w-80 bg-[#faf7f0] p-2 sm:p-2.5 pb-5 sm:pb-7 rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.92)] border border-neutral-300/60 cursor-pointer"
               >
                 <div className="relative w-full aspect-[16/10] bg-[#0b0d12] overflow-hidden shadow-inner">
                   <motion.img
